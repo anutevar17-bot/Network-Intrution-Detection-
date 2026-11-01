@@ -3,52 +3,82 @@ import streamlit as st
 import pandas as pd
 import joblib
 
-# Load trained model
-model = joblib.load("intrusion_detection_model.pkl")
-features = joblib.load("feature_columns.pkl")
-
 st.set_page_config(
     page_title="Network Intrusion Detection",
     page_icon="🛡️",
     layout="wide"
 )
 
+# Load model
+model = joblib.load("intrusion_detection_model.pkl")
+features = joblib.load("feature_columns.pkl")
+
 st.title("🛡️ Network Intrusion Detection System")
 st.write("Machine Learning Based Cybersecurity Dashboard")
 
-st.subheader("Project Overview")
+st.divider()
 
 col1, col2 = st.columns(2)
 
-with col1:
-    st.metric("Total Dataset Records", "123,117")
-
-with col2:
-    st.metric("ML Algorithm", "Random Forest")
+col1.metric("Algorithm", "Random Forest")
+col2.metric("Detection", "Multi-class Classification")
 
 st.divider()
 
-st.subheader("Network Traffic Prediction")
+st.header("📂 Upload Network Traffic CSV")
 
-st.write("Enter the numerical values for the network traffic features.")
+uploaded_file = st.file_uploader(
+    "Choose a CSV file",
+    type=["csv"]
+)
 
-input_values = {}
+if uploaded_file is not None:
+    try:
+        data = pd.read_csv(uploaded_file)
 
-for feature in features:
-    input_values[feature] = st.number_input(
-        feature,
-        value=0.0
-    )
+        st.success("CSV uploaded successfully!")
 
-if st.button("Detect Network Traffic"):
-    input_df = pd.DataFrame([input_values])
+        st.subheader("Uploaded Dataset")
+        st.dataframe(data.head(20))
 
-    prediction = model.predict(input_df)[0]
+        X_new = data.drop(
+            columns=["Attack_type"],
+            errors="ignore"
+        )
 
-    st.success(f"Predicted Category: {prediction}")
+        missing = [
+            col for col in features
+            if col not in X_new.columns
+        ]
 
-    if prediction in ["MQTT", "Thing_speak",
-                      "Wipro_bulb_Dataset", "Amazon-Alexa"]:
-        st.info("This record belongs to a normal traffic category.")
-    else:
-        st.error("Potential malicious traffic detected!")
+        if missing:
+            st.error(
+                "Missing columns: " + ", ".join(missing)
+            )
+        else:
+            X_new = X_new[features]
+
+            predictions = model.predict(X_new)
+
+            result = data.copy()
+            result["Predicted_Category"] = predictions
+
+            st.success("Prediction completed!")
+
+            st.subheader("Prediction Results")
+            st.dataframe(result)
+
+            st.subheader("Prediction Distribution")
+            st.bar_chart(
+                pd.Series(predictions).value_counts()
+            )
+
+            st.download_button(
+                "Download Prediction Results",
+                result.to_csv(index=False),
+                "network_predictions.csv",
+                "text/csv"
+            )
+
+    except Exception as e:
+        st.error(f"Error: {e}")
